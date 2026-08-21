@@ -1,0 +1,652 @@
+-- ============================================================
+-- FEMBOY HUB | by Yojan (MAX SPEED + GUARANTEED SCREEN FOV)
+-- ============================================================
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local VirtualInputManager = nil
+pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- ============================================================
+-- CONFIG SYSTEM
+-- ============================================================
+local maxRange = 2500
+local soruMaxDist = 2000
+local SoruFOV = 200
+local _G = _G or {}
+
+local AHK_Melee_Z, AHK_Melee_X, AHK_Melee_C = false, false, false
+local AHK_Fruit_Z, AHK_Fruit_X, AHK_Fruit_C, AHK_Fruit_V, AHK_Fruit_F = false, false, false, false, false
+local AHK_Sword_Z, AHK_Sword_X = false, false
+local AHK_Gun_Z, AHK_Gun_X = false, false
+local MacroEnabled = false
+local MacroDelay = 0 -- Default: 0ms (Instant)
+
+local function SaveConfig()
+    local conf = {
+        TargetPlayers = _G.G_SilentAimTargetPlayers,
+        TargetMobs = _G.G_SilentAimTargetMobs,
+        TeamCheck = _G.G_SilentAimTeamCheck,
+        SkillAimbot = _G.G_SilentAimSkill,
+        SoruAimbot = _G.G_SoruAimbotEnabled,
+        SoruInf = _G.G_SoruInfinitoEnabled,
+        Macro = MacroEnabled,
+        MacroDelay = MacroDelay * 1000,
+        AHK_Melee_Z = AHK_Melee_Z, AHK_Melee_X = AHK_Melee_X, AHK_Melee_C = AHK_Melee_C,
+        AHK_Fruit_Z = AHK_Fruit_Z, AHK_Fruit_X = AHK_Fruit_X, AHK_Fruit_C = AHK_Fruit_C, AHK_Fruit_V = AHK_Fruit_V, AHK_Fruit_F = AHK_Fruit_F,
+        AHK_Sword_Z = AHK_Sword_Z, AHK_Sword_X = AHK_Sword_X,
+        AHK_Gun_Z = AHK_Gun_Z, AHK_Gun_X = AHK_Gun_X,
+    }
+    pcall(function()
+        if writefile then writefile("FemboyHub_Config.json", HttpService:JSONEncode(conf)) end
+    end)
+end
+
+local function LoadConfig()
+    pcall(function()
+        if isfile and readfile and isfile("FemboyHub_Config.json") then
+            local str = readfile("FemboyHub_Config.json")
+            local conf = HttpService:JSONDecode(str)
+            if not conf then return end
+            if conf.TargetPlayers ~= nil then _G.G_SilentAimTargetPlayers = conf.TargetPlayers end
+            if conf.TargetMobs ~= nil then _G.G_SilentAimTargetMobs = conf.TargetMobs end
+            if conf.TeamCheck ~= nil then _G.G_SilentAimTeamCheck = conf.TeamCheck end
+            if conf.SkillAimbot ~= nil then _G.G_SilentAimSkill = conf.SkillAimbot end
+            if conf.SoruAimbot ~= nil then _G.G_SoruAimbotEnabled = conf.SoruAimbot end
+            if conf.SoruInf ~= nil then _G.G_SoruInfinitoEnabled = conf.SoruInf end
+            if conf.Macro ~= nil then MacroEnabled = conf.Macro end
+            if conf.MacroDelay ~= nil then MacroDelay = conf.MacroDelay / 1000 end
+            
+            if conf.AHK_Melee_Z ~= nil then AHK_Melee_Z = conf.AHK_Melee_Z end
+            if conf.AHK_Melee_X ~= nil then AHK_Melee_X = conf.AHK_Melee_X end
+            if conf.AHK_Melee_C ~= nil then AHK_Melee_C = conf.AHK_Melee_C end
+            if conf.AHK_Fruit_Z ~= nil then AHK_Fruit_Z = conf.AHK_Fruit_Z end
+            if conf.AHK_Fruit_X ~= nil then AHK_Fruit_X = conf.AHK_Fruit_X end
+            if conf.AHK_Fruit_C ~= nil then AHK_Fruit_C = conf.AHK_Fruit_C end
+            if conf.AHK_Fruit_V ~= nil then AHK_Fruit_V = conf.AHK_Fruit_V end
+            if conf.AHK_Fruit_F ~= nil then AHK_Fruit_F = conf.AHK_Fruit_F end
+            if conf.AHK_Sword_Z ~= nil then AHK_Sword_Z = conf.AHK_Sword_Z end
+            if conf.AHK_Sword_X ~= nil then AHK_Sword_X = conf.AHK_Sword_X end
+            if conf.AHK_Gun_Z ~= nil then AHK_Gun_Z = conf.AHK_Gun_Z end
+            if conf.AHK_Gun_X ~= nil then AHK_Gun_X = conf.AHK_Gun_X end
+        end
+    end)
+end
+
+-- ============================================================
+-- GUARANTEED 2D SCREEN FOV (No Drawing, Native Roblox GUI)
+-- ============================================================
+local currentThemeColor = Color3.fromRGB(255, 105, 180)
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FemboyHub_UI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local soruFOVFrame = Instance.new("Frame", screenGui)
+soruFOVFrame.Size = UDim2.new(0, SoruFOV * 2, 0, SoruFOV * 2)
+soruFOVFrame.Position = UDim2.new(0.5, -SoruFOV, 0.5, -SoruFOV)
+soruFOVFrame.BackgroundColor3 = Color3.fromRGB(255, 105, 180)
+soruFOVFrame.BackgroundTransparency = 0.85
+soruFOVFrame.Visible = false
+soruFOVFrame.ZIndex = 999
+Instance.new("UICorner", soruFOVFrame).CornerRadius = UDim.new(1, 0) -- Perfect circle
+local fovStroke = Instance.new("UIStroke", soruFOVFrame)
+fovStroke.Color = Color3.fromRGB(255, 105, 180)
+fovStroke.Thickness = 2
+fovStroke.Transparency = 0.3
+
+-- ============================================================
+-- MAIN UI FRAMEWORK
+-- ============================================================
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 450, 0, 320)
+mainFrame.Position = UDim2.new(0.5, -225, 0.5, -160)
+mainFrame.BackgroundColor3 = Color3.fromRGB(5, 5, 10)
+mainFrame.BackgroundTransparency = 0.1
+mainFrame.Visible = true
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
+Instance.new("UIStroke", mainFrame).Color = currentThemeColor
+
+local bgImageFrame = Instance.new("ImageLabel", mainFrame)
+bgImageFrame.Size = UDim2.new(1, 0, 1, 0)
+bgImageFrame.BackgroundTransparency = 1
+bgImageFrame.Image = "rbxassetid://139963312089855"
+bgImageFrame.ScaleType = Enum.ScaleType.Crop
+bgImageFrame.ZIndex = 0
+Instance.new("UICorner", bgImageFrame).CornerRadius = UDim.new(0, 16)
+
+-- ============================================================
+-- THE MINIMIZED LOGO (Tiny 40x40 size)
+-- ============================================================
+local logoBtn = Instance.new("ImageButton", screenGui)
+logoBtn.Size = UDim2.new(0, 40, 0, 40) 
+logoBtn.Position = UDim2.new(0, 10, 0, 10)
+logoBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+logoBtn.BackgroundTransparency = 0.25 
+logoBtn.Image = "rbxassetid://105641207810912"
+logoBtn.ScaleType = Enum.ScaleType.Fit
+logoBtn.ZIndex = 999
+logoBtn.Active = true
+logoBtn.Draggable = true
+logoBtn.Visible = false
+Instance.new("UICorner", logoBtn).CornerRadius = UDim.new(0, 10)
+local logoStroke = Instance.new("UIStroke", logoBtn)
+logoStroke.Color = currentThemeColor
+logoStroke.Thickness = 2
+
+logoBtn.MouseButton1Click:Connect(function()
+    logoBtn.Visible = false
+    mainFrame.Visible = true
+end)
+
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(0, 200, 0, 30)
+title.Position = UDim2.new(0, 15, 0, 10)
+title.BackgroundTransparency = 1
+title.Text = "FEMBOY HUB"
+title.Font = Enum.Font.GothamBlack
+title.TextSize = 18
+title.TextColor3 = currentThemeColor
+
+local subTitle = Instance.new("TextLabel", mainFrame)
+subTitle.Size = UDim2.new(0, 150, 0, 16)
+subTitle.Position = UDim2.new(0, 15, 0, 38)
+subTitle.BackgroundTransparency = 1
+subTitle.Text = "by Yojan"
+subTitle.Font = Enum.Font.GothamBold
+subTitle.TextSize = 10
+subTitle.TextColor3 = Color3.fromRGB(200, 200, 200)
+
+-- Controls
+local controlsContainer = Instance.new("Frame", mainFrame)
+controlsContainer.Size = UDim2.new(0, 70, 0, 25)
+controlsContainer.Position = UDim2.new(1, -80, 0, 10)
+controlsContainer.BackgroundTransparency = 1
+
+local minBtn = Instance.new("TextButton", controlsContainer)
+minBtn.Size = UDim2.new(0, 22, 0, 22)
+minBtn.Position = UDim2.new(0, 0, 0, 0)
+minBtn.BackgroundTransparency = 1
+minBtn.Text = "-"
+minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minBtn.Font = Enum.Font.GothamBlack
+Instance.new("UICorner", minBtn).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", minBtn).Color = Color3.fromRGB(255, 255, 255)
+minBtn.MouseButton1Click:Connect(function() 
+    mainFrame.Visible = false 
+    logoBtn.Visible = true 
+end)
+
+local closeBtn = Instance.new("TextButton", controlsContainer)
+closeBtn.Size = UDim2.new(0, 22, 0, 22)
+closeBtn.Position = UDim2.new(0, 28, 0, 0)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+closeBtn.Font = Enum.Font.GothamBlack
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", closeBtn).Color = Color3.fromRGB(255, 80, 80)
+closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+
+-- SIDEBAR
+local sidebar = Instance.new("Frame", mainFrame)
+sidebar.Size = UDim2.new(0, 110, 1, -60)
+sidebar.Position = UDim2.new(0, 10, 0, 60)
+sidebar.BackgroundTransparency = 1
+local sidebarScroll = Instance.new("ScrollingFrame", sidebar)
+sidebarScroll.Size = UDim2.new(1, 0, 1, 0)
+sidebarScroll.BackgroundTransparency = 1
+sidebarScroll.BorderSizePixel = 0
+Instance.new("UIListLayout", sidebarScroll).Padding = UDim.new(0, 6)
+
+local PagesContainer = Instance.new("Frame", mainFrame)
+PagesContainer.Size = UDim2.new(0, 310, 1, -60)
+PagesContainer.Position = UDim2.new(0, 130, 0, 60)
+PagesContainer.BackgroundTransparency = 1
+
+function createScrollingPage()
+    local sf = Instance.new("ScrollingFrame", PagesContainer)
+    sf.Size = UDim2.new(1, 0, 1, 0)
+    sf.BackgroundTransparency = 1
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 4
+    sf.Visible = false
+    Instance.new("UIListLayout", sf).Padding = UDim.new(0, 8)
+    return sf
+end
+
+local CombatPage = createScrollingPage()
+local SoruPage = createScrollingPage()
+CombatPage.Visible = true
+
+local categories = {{ key = "Combat", page = CombatPage }, { key = "Soru Engine", page = SoruPage }}
+local activeTabBtn = nil
+for _, cat in ipairs(categories) do
+    local btn = Instance.new("TextButton", sidebarScroll)
+    btn.Text = cat.key
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 10.5
+    btn.TextColor3 = (cat.page == CombatPage) and currentThemeColor or Color3.fromRGB(200, 200, 200)
+    btn.Size = UDim2.new(1, -10, 0, 28)
+    btn.BackgroundTransparency = 1
+    btn.MouseButton1Click:Connect(function()
+        if activeTabBtn then activeTabBtn.TextColor3 = Color3.fromRGB(200, 200, 200) end
+        activeTabBtn = btn; btn.TextColor3 = currentThemeColor
+        CombatPage.Visible = false; SoruPage.Visible = false
+        cat.page.Visible = true
+    end)
+end
+
+-- ============================================================
+-- UI HELPERS
+-- ============================================================
+function createModuleCard(name, height, targetPage)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, -10, 0, height)
+    card.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+    card.BackgroundTransparency = 0.3
+    card.Parent = targetPage
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+    Instance.new("UIStroke", card).Color = currentThemeColor
+    local title = Instance.new("TextLabel", card)
+    title.Size = UDim2.new(1, 0, 0, 20)
+    title.Position = UDim2.new(0, 0, 0, 2)
+    title.BackgroundTransparency = 1
+    title.Text = "[ " .. name .. " ]"
+    title.TextColor3 = currentThemeColor
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 10
+    return card
+end
+
+function addToggleElement(parent, labelText, defaultState, yPos, callback)
+    local frame = Instance.new("Frame", parent)
+    frame.Size = UDim2.new(1, -12, 0, 20)
+    frame.Position = UDim2.new(0, 6, 0, yPos)
+    frame.BackgroundTransparency = 1
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 9
+
+    local clickBtn = Instance.new("TextButton", frame)
+    clickBtn.Size = UDim2.new(0, 36, 0, 16)
+    clickBtn.Position = UDim2.new(1, -38, 0.5, -8)
+    clickBtn.BackgroundColor3 = defaultState and currentThemeColor or Color3.fromRGB(25, 25, 30)
+    clickBtn.Text = defaultState and "ON" or "OFF"
+    clickBtn.Font = Enum.Font.GothamBold
+    clickBtn.TextSize = 8
+    clickBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Instance.new("UICorner", clickBtn).CornerRadius = UDim.new(0, 6)
+    Instance.new("UIStroke", clickBtn).Color = currentThemeColor
+
+    local state = defaultState
+    clickBtn.MouseButton1Click:Connect(function()
+        state = not state
+        clickBtn.BackgroundColor3 = state and currentThemeColor or Color3.fromRGB(25, 25, 30)
+        clickBtn.Text = state and "ON" or "OFF"
+        callback(state)
+    end)
+    return clickBtn
+end
+
+-- ============================================================
+-- BUILD COMBAT PAGE
+-- ============================================================
+local cCard = createModuleCard("Aimbot Modules", 160, CombatPage)
+addToggleElement(cCard, "Target Players", false, 24, function(v) _G.G_SilentAimTargetPlayers = v end)
+addToggleElement(cCard, "Target NPCs", false, 48, function(v) _G.G_SilentAimTargetMobs = v end)
+addToggleElement(cCard, "Team Check", false, 72, function(v) _G.G_SilentAimTeamCheck = v end)
+
+local aimTargetBtn = Instance.new("TextButton", cCard)
+aimTargetBtn.Size = UDim2.new(1, -12, 0, 20)
+aimTargetBtn.Position = UDim2.new(0, 6, 0, 96)
+aimTargetBtn.BackgroundTransparency = 1
+aimTargetBtn.Text = "🎯 Target: Nearest"
+aimTargetBtn.TextColor3 = currentThemeColor
+aimTargetBtn.Font = Enum.Font.GothamBold
+aimTargetBtn.TextSize = 9
+Instance.new("UICorner", aimTargetBtn).CornerRadius = UDim.new(0, 4)
+Instance.new("UIStroke", aimTargetBtn).Color = currentThemeColor
+aimTargetBtn.MouseButton1Click:Connect(function()
+    local plist = {"Nearest"}
+    for _, p in pairs(Players:GetPlayers()) do if p ~= player then table.insert(plist, p.Name) end end
+    local currIdx = table.find(plist, _G.G_SilentAimSelectedPlayer) or 1
+    local nextIdx = (currIdx % #plist) + 1
+    _G.G_SilentAimSelectedPlayer = plist[nextIdx] == "Nearest" and "" or plist[nextIdx]
+    aimTargetBtn.Text = "🎯 Target: " .. (plist[nextIdx])
+end)
+
+addToggleElement(cCard, "Silent Aim (Skills)", false, 120, function(v) _G.G_SilentAimSkill = v end)
+
+-- ============================================================
+-- BUILD SORU ENGINE PAGE
+-- ============================================================
+local sCard = createModuleCard("Soru Engine", 190, SoruPage)
+addToggleElement(sCard, "Infinite Soru", false, 24, function(v) _G.G_SoruInfinitoEnabled = v end)
+
+local soruTargetBtn = Instance.new("TextButton", sCard)
+soruTargetBtn.Size = UDim2.new(1, -12, 0, 20)
+soruTargetBtn.Position = UDim2.new(0, 6, 0, 48)
+soruTargetBtn.BackgroundTransparency = 1
+soruTargetBtn.Text = "🌀 Soru Target: Nearest"
+soruTargetBtn.TextColor3 = currentThemeColor
+soruTargetBtn.Font = Enum.Font.GothamBold
+soruTargetBtn.TextSize = 9
+Instance.new("UICorner", soruTargetBtn).CornerRadius = UDim.new(0, 4)
+Instance.new("UIStroke", soruTargetBtn).Color = currentThemeColor
+soruTargetBtn.MouseButton1Click:Connect(function()
+    local plist = {"Nearest"}
+    for _, p in pairs(Players:GetPlayers()) do if p ~= player then table.insert(plist, p.Name) end end
+    local currIdx = table.find(plist, _G.G_SelectedSoruTarget) or 1
+    local nextIdx = (currIdx % #plist) + 1
+    _G.G_SelectedSoruTarget = plist[nextIdx] == "Nearest" and "Nearest" or plist[nextIdx]
+    soruTargetBtn.Text = "🌀 Soru Target: " .. (plist[nextIdx])
+end)
+
+addToggleElement(sCard, "Soru Aimbot (TP)", false, 72, function(v) _G.G_SoruAimbotEnabled = v end)
+addToggleElement(sCard, "Show Soru FOV", false, 96, function(v) 
+    _G.G_SoruShowFOV = v 
+    soruFOVFrame.Visible = v 
+    if v then 
+        soruFOVFrame.Size = UDim2.new(0, SoruFOV * 2, 0, SoruFOV * 2)
+        soruFOVFrame.Position = UDim2.new(0.5, -SoruFOV, 0.5, -SoruFOV)
+    end
+end)
+
+-- ============================================================
+-- ENLARGED AHK MACRO UI + Custom Delay Textbox
+-- ============================================================
+local macroCard = createModuleCard("Soru AHK (Macro)", 70, SoruPage)
+local ahkConfigGui = nil
+
+local function createAHKConfigUI()
+    if ahkConfigGui then ahkConfigGui:Destroy() end
+    ahkConfigGui = Instance.new("ScreenGui")
+    ahkConfigGui.Name = "FemboyHub_AHK_Config"
+    ahkConfigGui.ResetOnSpawn = false
+    ahkConfigGui.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 300, 0, 280)
+    frame.Position = UDim2.new(0.5, -150, 0.5, -140)
+    frame.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+    frame.BackgroundTransparency = 0.1
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = ahkConfigGui
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+    Instance.new("UIStroke", frame).Color = currentThemeColor
+
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 0, 25)
+    title.Position = UDim2.new(0, 0, 0, 2)
+    title.BackgroundTransparency = 1
+    title.Text = "⚙️ AHK AFTER SORU CONFIG"
+    title.Font = Enum.Font.GothamBlack
+    title.TextSize = 10
+    title.TextColor3 = currentThemeColor
+
+    local closeBtn = Instance.new("TextButton", frame)
+    closeBtn.Size = UDim2.new(0, 20, 0, 20)
+    closeBtn.Position = UDim2.new(1, -25, 0, 4)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+    closeBtn.Font = Enum.Font.GothamBlack
+    closeBtn.MouseButton1Click:Connect(function() ahkConfigGui:Destroy(); ahkConfigGui = nil end)
+
+    local function makeKeyToggle(parent, yPos, label, varRef)
+        local btn = Instance.new("TextButton", parent)
+        btn.Size = UDim2.new(0, 32, 0, 22)
+        btn.Position = UDim2.new(0, 10, 0, yPos)
+        btn.BackgroundColor3 = varRef and currentThemeColor or Color3.fromRGB(25, 25, 30)
+        btn.Text = label
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 9
+        btn.TextColor3 = varRef and Color3.fromRGB(10, 10, 10) or Color3.fromRGB(200, 200, 200)
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        return btn
+    end
+
+    local yOff = 32
+    
+    -- MELEE
+    local mlbl = Instance.new("TextLabel", frame); mlbl.Size = UDim2.new(1, 0, 0, 16); mlbl.Position = UDim2.new(0, 0, 0, yOff); mlbl.Text = "MELEE"; mlbl.TextSize = 8; mlbl.BackgroundTransparency=1; mlbl.TextColor3=Color3.new(1,1,1); mlbl.Font=Enum.Font.GothamBold
+    yOff = yOff + 20
+    local mZ = makeKeyToggle(frame, yOff, "Z", AHK_Melee_Z); mZ.MouseButton1Click:Connect(function() AHK_Melee_Z = not AHK_Melee_Z; mZ.BackgroundColor3 = AHK_Melee_Z and currentThemeColor or Color3.fromRGB(25,25,30); mZ.TextColor3 = AHK_Melee_Z and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local mX = makeKeyToggle(frame, yOff, "X", AHK_Melee_X); mX.Position = UDim2.new(0, 50, 0, yOff); mX.MouseButton1Click:Connect(function() AHK_Melee_X = not AHK_Melee_X; mX.BackgroundColor3 = AHK_Melee_X and currentThemeColor or Color3.fromRGB(25,25,30); mX.TextColor3 = AHK_Melee_X and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local mC = makeKeyToggle(frame, yOff, "C", AHK_Melee_C); mC.Position = UDim2.new(0, 90, 0, yOff); mC.MouseButton1Click:Connect(function() AHK_Melee_C = not AHK_Melee_C; mC.BackgroundColor3 = AHK_Melee_C and currentThemeColor or Color3.fromRGB(25,25,30); mC.TextColor3 = AHK_Melee_C and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    yOff = yOff + 30
+
+    -- FRUIT
+    local flbl = Instance.new("TextLabel", frame); flbl.Size = UDim2.new(1, 0, 0, 16); flbl.Position = UDim2.new(0, 0, 0, yOff); flbl.Text = "FRUIT"; flbl.TextSize = 8; flbl.BackgroundTransparency=1; flbl.TextColor3=Color3.new(1,1,1); flbl.Font=Enum.Font.GothamBold
+    yOff = yOff + 20
+    local fZ = makeKeyToggle(frame, yOff, "Z", AHK_Fruit_Z); fZ.MouseButton1Click:Connect(function() AHK_Fruit_Z = not AHK_Fruit_Z; fZ.BackgroundColor3 = AHK_Fruit_Z and currentThemeColor or Color3.fromRGB(25,25,30); fZ.TextColor3 = AHK_Fruit_Z and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local fX = makeKeyToggle(frame, yOff, "X", AHK_Fruit_X); fX.Position = UDim2.new(0, 50, 0, yOff); fX.MouseButton1Click:Connect(function() AHK_Fruit_X = not AHK_Fruit_X; fX.BackgroundColor3 = AHK_Fruit_X and currentThemeColor or Color3.fromRGB(25,25,30); fX.TextColor3 = AHK_Fruit_X and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local fC = makeKeyToggle(frame, yOff, "C", AHK_Fruit_C); fC.Position = UDim2.new(0, 90, 0, yOff); fC.MouseButton1Click:Connect(function() AHK_Fruit_C = not AHK_Fruit_C; fC.BackgroundColor3 = AHK_Fruit_C and currentThemeColor or Color3.fromRGB(25,25,30); fC.TextColor3 = AHK_Fruit_C and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local fV = makeKeyToggle(frame, yOff, "V", AHK_Fruit_V); fV.Position = UDim2.new(0, 130, 0, yOff); fV.MouseButton1Click:Connect(function() AHK_Fruit_V = not AHK_Fruit_V; fV.BackgroundColor3 = AHK_Fruit_V and currentThemeColor or Color3.fromRGB(25,25,30); fV.TextColor3 = AHK_Fruit_V and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local fF = makeKeyToggle(frame, yOff, "F", AHK_Fruit_F); fF.Position = UDim2.new(0, 170, 0, yOff); fF.MouseButton1Click:Connect(function() AHK_Fruit_F = not AHK_Fruit_F; fF.BackgroundColor3 = AHK_Fruit_F and currentThemeColor or Color3.fromRGB(25,25,30); fF.TextColor3 = AHK_Fruit_F and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    yOff = yOff + 30
+
+    -- SWORD
+    local slbl = Instance.new("TextLabel", frame); slbl.Size = UDim2.new(1, 0, 0, 16); slbl.Position = UDim2.new(0, 0, 0, yOff); slbl.Text = "SWORD"; slbl.TextSize = 8; slbl.BackgroundTransparency=1; slbl.TextColor3=Color3.new(1,1,1); slbl.Font=Enum.Font.GothamBold
+    yOff = yOff + 20
+    local sZ = makeKeyToggle(frame, yOff, "Z", AHK_Sword_Z); sZ.MouseButton1Click:Connect(function() AHK_Sword_Z = not AHK_Sword_Z; sZ.BackgroundColor3 = AHK_Sword_Z and currentThemeColor or Color3.fromRGB(25,25,30); sZ.TextColor3 = AHK_Sword_Z and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local sX = makeKeyToggle(frame, yOff, "X", AHK_Sword_X); sX.Position = UDim2.new(0, 50, 0, yOff); sX.MouseButton1Click:Connect(function() AHK_Sword_X = not AHK_Sword_X; sX.BackgroundColor3 = AHK_Sword_X and currentThemeColor or Color3.fromRGB(25,25,30); sX.TextColor3 = AHK_Sword_X and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    yOff = yOff + 30
+
+    -- GUN
+    local glbl = Instance.new("TextLabel", frame); glbl.Size = UDim2.new(1, 0, 0, 16); glbl.Position = UDim2.new(0, 0, 0, yOff); glbl.Text = "GUN"; glbl.TextSize = 8; glbl.BackgroundTransparency=1; glbl.TextColor3=Color3.new(1,1,1); glbl.Font=Enum.Font.GothamBold
+    yOff = yOff + 20
+    local gZ = makeKeyToggle(frame, yOff, "Z", AHK_Gun_Z); gZ.MouseButton1Click:Connect(function() AHK_Gun_Z = not AHK_Gun_Z; gZ.BackgroundColor3 = AHK_Gun_Z and currentThemeColor or Color3.fromRGB(25,25,30); gZ.TextColor3 = AHK_Gun_Z and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    local gX = makeKeyToggle(frame, yOff, "X", AHK_Gun_X); gX.Position = UDim2.new(0, 50, 0, yOff); gX.MouseButton1Click:Connect(function() AHK_Gun_X = not AHK_Gun_X; gX.BackgroundColor3 = AHK_Gun_X and currentThemeColor or Color3.fromRGB(25,25,30); gX.TextColor3 = AHK_Gun_X and Color3.fromRGB(10,10,10) or Color3.fromRGB(200,200,200) end)
+    yOff = yOff + 32
+
+    -- DELAY SETTINGS (Text Box)
+    local delayLbl = Instance.new("TextLabel", frame)
+    delayLbl.Size = UDim2.new(0, 120, 0, 20)
+    delayLbl.Position = UDim2.new(0, 10, 0, yOff)
+    delayLbl.BackgroundTransparency = 1
+    delayLbl.Text = "Delay (ms):"
+    delayLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    delayLbl.Font = Enum.Font.GothamBold
+    delayLbl.TextSize = 10
+    delayLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+    local delayBox = Instance.new("TextBox", frame)
+    delayBox.Size = UDim2.new(0, 120, 0, 26)
+    delayBox.Position = UDim2.new(1, -130, 0, yOff - 3)
+    delayBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    delayBox.BackgroundTransparency = 1
+    delayBox.Text = tostring(math.floor((MacroDelay * 1000) + 0.5))
+    delayBox.TextColor3 = currentThemeColor
+    delayBox.Font = Enum.Font.GothamBold
+    delayBox.TextSize = 10
+    delayBox.TextXAlignment = Enum.TextXAlignment.Center
+    Instance.new("UICorner", delayBox).CornerRadius = UDim.new(0, 6)
+    Instance.new("UIStroke", delayBox).Color = currentThemeColor
+
+    delayBox.FocusLost:Connect(function()
+        local typedMs = tonumber(delayBox.Text)
+        if typedMs and typedMs >= 0 then
+            MacroDelay = typedMs / 1000
+        else
+            delayBox.Text = "0"
+            MacroDelay = 0
+        end
+    end)
+end
+
+local macroToggleBtn = addToggleElement(macroCard, "Activate Soru AHK", false, 24, function(v) 
+    MacroEnabled = v 
+    if v then createAHKConfigUI() else if ahkConfigGui then ahkConfigGui:Destroy(); ahkConfigGui = nil end end
+end)
+
+local configBtn = Instance.new("TextButton", macroCard)
+configBtn.Size = UDim2.new(1, -12, 0, 20)
+configBtn.Position = UDim2.new(0, 6, 0, 48)
+configBtn.BackgroundTransparency = 1
+configBtn.Text = "⚙️ Open AHK Config Panel"
+configBtn.TextColor3 = currentThemeColor
+configBtn.Font = Enum.Font.GothamBold
+configBtn.TextSize = 8.5
+Instance.new("UICorner", configBtn).CornerRadius = UDim.new(0, 4)
+Instance.new("UIStroke", configBtn).Color = currentThemeColor
+configBtn.MouseButton1Click:Connect(function() createAHKConfigUI() end)
+
+-- ============================================================
+-- SAFELY LAUNCH THE AIMBOT / AHK LOGIC (MAXIMUM SPEED)
+-- ============================================================
+task.spawn(function()
+    pcall(function()
+        FLASH_NAMES = {"FlashStepRegular","FlashStepDraco","FlashStep","Flashstep","Soru"}
+        FLASH_IDS = {"17555632156","18461649274","616006778","616010882","5403485593","5403491911"}
+
+        function isFlashstep(track)
+            for _,n in ipairs(FLASH_NAMES) do
+                if string.find(string.lower(track.Name), string.lower(n)) then return true end
+            end
+            local id = track.Animation and track.Animation.AnimationId:match("%d+") or ""
+            for _,fid in ipairs(FLASH_IDS) do
+                if id == fid then return true end
+            end
+            return false
+        end
+
+        function executeSoruCombo()
+            if not MacroEnabled or MacroExecuting then return end
+            MacroExecuting = true
+            
+            -- Press key at absolute max speed (1 millisecond)
+            local function pressKey(kc)
+                if not VirtualInputManager then return end
+                VirtualInputManager:SendKeyEvent(true, kc, false, game)
+                task.wait(0.001)
+                VirtualInputManager:SendKeyEvent(false, kc, false, game)
+            end
+            
+            local SLOT_KEYS = { [1] = Enum.KeyCode.One, [2] = Enum.KeyCode.Two, [3] = Enum.KeyCode.Three, [4] = Enum.KeyCode.Four }
+            
+            local function safeEquip(slotNum) 
+                pressKey(SLOT_KEYS[slotNum]); 
+                task.wait(0.001)
+            end
+
+            safeEquip(1)
+            if AHK_Melee_Z then pressKey(Enum.KeyCode.Z); task.wait(MacroDelay) end
+            if AHK_Melee_X then pressKey(Enum.KeyCode.X); task.wait(MacroDelay) end
+            if AHK_Melee_C then pressKey(Enum.KeyCode.C); task.wait(MacroDelay) end
+
+            safeEquip(2)
+            if AHK_Fruit_Z then pressKey(Enum.KeyCode.Z); task.wait(MacroDelay) end
+            if AHK_Fruit_X then pressKey(Enum.KeyCode.X); task.wait(MacroDelay) end
+            if AHK_Fruit_C then pressKey(Enum.KeyCode.C); task.wait(MacroDelay) end
+            if AHK_Fruit_V then pressKey(Enum.KeyCode.V); task.wait(MacroDelay) end
+            if AHK_Fruit_F then pressKey(Enum.KeyCode.F); task.wait(MacroDelay) end
+
+            safeEquip(3)
+            if AHK_Sword_Z then pressKey(Enum.KeyCode.Z); task.wait(MacroDelay) end
+            if AHK_Sword_X then pressKey(Enum.KeyCode.X); task.wait(MacroDelay) end
+
+            safeEquip(4)
+            if AHK_Gun_Z then pressKey(Enum.KeyCode.Z); task.wait(MacroDelay) end
+            if AHK_Gun_X then pressKey(Enum.KeyCode.X); task.wait(MacroDelay) end
+
+            MacroExecuting = false
+        end
+
+        function monitorCharMacro(char)
+            local h = char:WaitForChild("Humanoid", 5) 
+            if not h then return end
+            h.AnimationPlayed:Connect(function(track)
+                if isFlashstep(track) and MacroEnabled then
+                    task.spawn(executeSoruCombo)
+                end
+            end)
+        end
+        player.CharacterAdded:Connect(monitorCharMacro)
+        if player.Character then monitorCharMacro(player.Character) end
+
+        -- Aiming Logic (Strict Hitboxing on HumanoidRootPart)
+        local oldIndex, oldNamecall
+        local currentSilentAimTarget = nil
+        
+        local function GetClosestTargetToCenter()
+            local myHRP = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if not myHRP then return nil end
+            local maxDist3D = maxRange
+            local closestPart, shortest3DDist = nil, maxDist3D
+            
+            local function checkTargetPart(character)
+                if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+                local p = Players:GetPlayerFromCharacter(character)
+                if p and p == player then return end
+                if _G.G_SilentAimTeamCheck and p and p.Team and p.Team.Name == player.Team.Name then return end
+                local hum = character:FindFirstChildOfClass("Humanoid")
+                local hrp = character:FindFirstChild("HumanoidRootPart")
+                if hum and hum.Health > 0 and hrp then
+                    local worldDist = (hrp.Position - myHRP.Position).Magnitude
+                    if worldDist <= shortest3DDist then
+                        shortest3DDist = worldDist; closestPart = hrp
+                    end
+                end
+            end
+            if _G.G_SilentAimTargetPlayers then for _, p in ipairs(Players:GetPlayers()) do if p ~= player then checkTargetPart(p.Character) end end end
+            if _G.G_SilentAimTargetMobs then
+                local enemies = workspace:FindFirstChild("Enemies")
+                if enemies then for _, enemy in ipairs(enemies:GetChildren()) do checkTargetPart(enemy) end end
+            end
+            return closestPart
+        end
+
+        if hookmetamethod then
+            pcall(function()
+                oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+                    if not checkcaller() and self == mouse and (key == "Hit" or key == "Target") then
+                        if _G.G_SilentAimSkill and currentSilentAimTarget then
+                            if key == "Hit" then return CFrame.new(currentSilentAimTarget.Position) end
+                            if key == "Target" then return currentSilentAimTarget end
+                        end
+                    end
+                    return oldIndex(self, key)
+                end))
+                oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+                    local args = {...}
+                    local ncm = getnamecallmethod and getnamecallmethod()
+                    local method = ncm and tostring(ncm):lower() or ""
+                    if not checkcaller() and (method == "fireserver" or method == "invokeserver") and _G.G_SilentAimSkill and currentSilentAimTarget then
+                        local activePos = currentSilentAimTarget.Position
+                        for i, arg in ipairs(args) do
+                            if typeof(arg) == "Vector3" then args[i] = activePos end
+                            if typeof(arg) == "CFrame" then args[i] = CFrame.new(activePos) end
+                        end
+                        return oldNamecall(self, unpack(args))
+                    end
+                    return oldNamecall(self, ...)
+                end))
+            end)
+        end
+
+        while RunService.RenderStepped:Wait() do
+            if _G.G_SilentAimSkill then currentSilentAimTarget = GetClosestTargetToCenter() end
+        end
+    end)
+end)
+
+LoadConfig()
+print("💗 FEMBOY HUB LOADED SUCCESSFULLY!")
